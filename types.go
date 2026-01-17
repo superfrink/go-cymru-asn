@@ -21,10 +21,21 @@ func (e LookupError) Error() string {
 	return e.Err.Error()
 }
 
+// ParseError represents a failed parse of a response line.
+type ParseError struct {
+	Line string
+	Err  error
+}
+
+func (e ParseError) Error() string {
+	return e.Err.Error()
+}
+
 // Response contains the results of a bulk ASN lookup.
 type Response struct {
-	Results []Result
-	Errors  []LookupError
+	Results     []Result
+	Errors      []LookupError
+	ParseErrors []ParseError
 }
 
 // Option configures a Client.

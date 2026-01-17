@@ -12,6 +12,8 @@ import (
 )
 
 func main() {
+	sandbox()
+
 	timeout := flag.Duration("timeout", 30*time.Second, "connection timeout")
 	server := flag.String("server", cymruasn.DefaultServer, "whois server address")
 	flag.Parse()
@@ -68,11 +70,22 @@ func readFromStdin() []string {
 		return ips
 	}
 
+	const maxLineSize = 1024 * 1024 // 1MB max line size
 	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Buffer(make([]byte, 0, 64*1024), maxLineSize)
+
 	for scanner.Scan() {
 		line := scanner.Text()
 		if line != "" {
 			ips = append(ips, line)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		if err == bufio.ErrTooLong {
+			fmt.Fprintf(os.Stderr, "error reading stdin: line exceeded maximum length of %d bytes\n", maxLineSize)
+		} else {
+			fmt.Fprintf(os.Stderr, "error reading stdin: %v\n", err)
 		}
 	}
 

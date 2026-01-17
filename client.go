@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"strings"
+	"time"
 )
 
 // NewClient creates a new ASN lookup client with the given options.
@@ -40,7 +41,7 @@ func (c *Client) Lookup(ctx context.Context, ips []string) (*Response, error) {
 
 	request := c.buildRequest(validIPs)
 
-	results, err := c.query(ctx, request)
+	results, parseErrs, err := c.query(ctx, request)
 	if err != nil {
 		return nil, err
 	}
@@ -49,8 +50,9 @@ func (c *Client) Lookup(ctx context.Context, ips []string) (*Response, error) {
 	allErrors := append(invalidErrs, lookupErrs...)
 
 	return &Response{
-		Results: results,
-		Errors:  allErrors,
+		Results:     results,
+		Errors:      allErrors,
+		ParseErrors: parseErrs,
 	}, nil
 }
 
@@ -102,8 +104,11 @@ func (c *Client) buildRequest(ips []string) []byte {
 	return buf.Bytes()
 }
 
+// MaxResponseSize is the maximum allowed response size (10MB).
+const MaxResponseSize = 10 * 1024 * 1024
+
 // query sends the request to the whois server and returns parsed results.
-func (c *Client) query(ctx context.Context, request []byte) ([]Result, error) {
+func (c *Client) query(ctx context.Context, request []byte) ([]Result, []ParseError, error) {
 	addr := net.JoinHostPort(c.server, c.port)
 
 	dialer := &net.Dialer{
@@ -112,29 +117,30 @@ func (c *Client) query(ctx context.Context, request []byte) ([]Result, error) {
 
 	conn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to %s: %w", addr, err)
+		return nil, nil, fmt.Errorf("failed to connect to %s: %w", addr, err)
 	}
-	defer func() {
-		closeErr := conn.Close()
-		if closeErr != nil && err == nil {
-			err = closeErr
-		}
-	}()
+	defer conn.Close()
 
-	if deadline, ok := ctx.Deadline(); ok {
-		if setErr := conn.SetDeadline(deadline); setErr != nil {
-			return nil, fmt.Errorf("failed to set deadline: %w", setErr)
-		}
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		deadline = time.Now().Add(c.timeout)
+	}
+	if setErr := conn.SetDeadline(deadline); setErr != nil {
+		return nil, nil, fmt.Errorf("failed to set deadline: %w", setErr)
 	}
 
-	_, err = conn.Write(request)
+	_, err = io.Copy(conn, bytes.NewReader(request))
 	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
+		return nil, nil, fmt.Errorf("failed to send request: %w", err)
 	}
 
-	response, err := io.ReadAll(conn)
+	limitedReader := io.LimitReader(conn, MaxResponseSize+1)
+	response, err := io.ReadAll(limitedReader)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+		return nil, nil, fmt.Errorf("failed to read response: %w", err)
+	}
+	if len(response) > MaxResponseSize {
+		return nil, nil, fmt.Errorf("response exceeded maximum size of %d bytes", MaxResponseSize)
 	}
 
 	return parseResponse(response)
@@ -144,12 +150,12 @@ func (c *Client) query(ctx context.Context, request []byte) ([]Result, error) {
 func (c *Client) matchResultsToIPs(requestedIPs []string, results []Result) []LookupError {
 	resultMap := make(map[string]bool)
 	for _, r := range results {
-		resultMap[r.IP] = true
+		resultMap[canonicalIP(r.IP)] = true
 	}
 
 	var errs []LookupError
 	for _, ip := range requestedIPs {
-		if !resultMap[ip] {
+		if !resultMap[canonicalIP(ip)] {
 			errs = append(errs, LookupError{
 				IP:  ip,
 				Err: fmt.Errorf("no result returned for IP: %s", ip),
@@ -158,4 +164,13 @@ func (c *Client) matchResultsToIPs(requestedIPs []string, results []Result) []Lo
 	}
 
 	return errs
+}
+
+// canonicalIP returns a normalized string representation of an IP address.
+func canonicalIP(ip string) string {
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return ip
+	}
+	return parsed.String()
 }

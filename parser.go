@@ -9,10 +9,12 @@ import (
 )
 
 var (
-	ErrEmptyResponse  = errors.New("empty response from server")
-	ErrInvalidFormat  = errors.New("invalid response format")
-	ErrNoResults      = errors.New("no results in response")
+	ErrEmptyResponse = errors.New("empty response from server")
+	ErrInvalidFormat = errors.New("invalid response format")
+	ErrLineTooLong   = errors.New("response line exceeded maximum length")
 )
+
+const maxLineSize = 1024 * 1024 // 1MB max line size
 
 // parseResponse parses the bulk whois response into Result structs.
 // Response format (pipe-delimited):
@@ -20,13 +22,15 @@ var (
 //	Bulk mode; whois.cymru.com [timestamp]
 //	AS      | IP               | BGP Prefix       | CC | AS Name
 //	15169   | 8.8.8.8          | 8.8.8.0/24       | US | GOOGLE, US
-func parseResponse(data []byte) ([]Result, error) {
+func parseResponse(data []byte) ([]Result, []ParseError, error) {
 	if len(data) == 0 {
-		return nil, ErrEmptyResponse
+		return nil, nil, ErrEmptyResponse
 	}
 
 	var results []Result
+	var parseErrors []ParseError
 	scanner := bufio.NewScanner(bytes.NewReader(data))
+	scanner.Buffer(make([]byte, 0, 64*1024), maxLineSize)
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -45,6 +49,7 @@ func parseResponse(data []byte) ([]Result, error) {
 
 		result, err := parseLine(line)
 		if err != nil {
+			parseErrors = append(parseErrors, ParseError{Line: line, Err: err})
 			continue
 		}
 
@@ -52,10 +57,13 @@ func parseResponse(data []byte) ([]Result, error) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return results, err
+		if errors.Is(err, bufio.ErrTooLong) {
+			return results, parseErrors, ErrLineTooLong
+		}
+		return results, parseErrors, err
 	}
 
-	return results, nil
+	return results, parseErrors, nil
 }
 
 // isHeaderLine checks if the line is a column header line.
