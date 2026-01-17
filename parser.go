@@ -20,12 +20,13 @@ var (
 //	Bulk mode; whois.cymru.com [timestamp]
 //	AS      | IP               | BGP Prefix       | CC | AS Name
 //	15169   | 8.8.8.8          | 8.8.8.0/24       | US | GOOGLE, US
-func parseResponse(data []byte) ([]Result, error) {
+func parseResponse(data []byte) ([]Result, []ParseError, error) {
 	if len(data) == 0 {
-		return nil, ErrEmptyResponse
+		return nil, nil, ErrEmptyResponse
 	}
 
 	var results []Result
+	var parseErrors []ParseError
 	scanner := bufio.NewScanner(bytes.NewReader(data))
 
 	for scanner.Scan() {
@@ -45,6 +46,7 @@ func parseResponse(data []byte) ([]Result, error) {
 
 		result, err := parseLine(line)
 		if err != nil {
+			parseErrors = append(parseErrors, ParseError{Line: line, Err: err})
 			continue
 		}
 
@@ -52,10 +54,10 @@ func parseResponse(data []byte) ([]Result, error) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return results, err
+		return results, parseErrors, err
 	}
 
-	return results, nil
+	return results, parseErrors, nil
 }
 
 // isHeaderLine checks if the line is a column header line.

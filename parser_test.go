@@ -99,7 +99,7 @@ NA      | 192.0.2.1        | NA               | ZZ | NA`,
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			results, err := parseResponse([]byte(tt.input))
+			results, _, err := parseResponse([]byte(tt.input))
 
 			if tt.wantErr {
 				if err == nil {

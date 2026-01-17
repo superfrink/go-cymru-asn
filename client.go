@@ -41,7 +41,7 @@ func (c *Client) Lookup(ctx context.Context, ips []string) (*Response, error) {
 
 	request := c.buildRequest(validIPs)
 
-	results, err := c.query(ctx, request)
+	results, parseErrs, err := c.query(ctx, request)
 	if err != nil {
 		return nil, err
 	}
@@ -50,8 +50,9 @@ func (c *Client) Lookup(ctx context.Context, ips []string) (*Response, error) {
 	allErrors := append(invalidErrs, lookupErrs...)
 
 	return &Response{
-		Results: results,
-		Errors:  allErrors,
+		Results:     results,
+		Errors:      allErrors,
+		ParseErrors: parseErrs,
 	}, nil
 }
 
@@ -107,7 +108,7 @@ func (c *Client) buildRequest(ips []string) []byte {
 const MaxResponseSize = 10 * 1024 * 1024
 
 // query sends the request to the whois server and returns parsed results.
-func (c *Client) query(ctx context.Context, request []byte) ([]Result, error) {
+func (c *Client) query(ctx context.Context, request []byte) ([]Result, []ParseError, error) {
 	addr := net.JoinHostPort(c.server, c.port)
 
 	dialer := &net.Dialer{
@@ -116,7 +117,7 @@ func (c *Client) query(ctx context.Context, request []byte) ([]Result, error) {
 
 	conn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to %s: %w", addr, err)
+		return nil, nil, fmt.Errorf("failed to connect to %s: %w", addr, err)
 	}
 	defer conn.Close()
 
@@ -125,21 +126,21 @@ func (c *Client) query(ctx context.Context, request []byte) ([]Result, error) {
 		deadline = time.Now().Add(c.timeout)
 	}
 	if setErr := conn.SetDeadline(deadline); setErr != nil {
-		return nil, fmt.Errorf("failed to set deadline: %w", setErr)
+		return nil, nil, fmt.Errorf("failed to set deadline: %w", setErr)
 	}
 
 	_, err = conn.Write(request)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
+		return nil, nil, fmt.Errorf("failed to send request: %w", err)
 	}
 
 	limitedReader := io.LimitReader(conn, MaxResponseSize+1)
 	response, err := io.ReadAll(limitedReader)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+		return nil, nil, fmt.Errorf("failed to read response: %w", err)
 	}
 	if len(response) > MaxResponseSize {
-		return nil, fmt.Errorf("response exceeded maximum size of %d bytes", MaxResponseSize)
+		return nil, nil, fmt.Errorf("response exceeded maximum size of %d bytes", MaxResponseSize)
 	}
 
 	return parseResponse(response)
