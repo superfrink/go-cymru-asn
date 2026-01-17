@@ -2,6 +2,8 @@
 
 A Go library and CLI tool for fetching Autonomous System Numbers (ASNs) and BGP information for IP addresses using [Team Cymru's IP-to-ASN mapping service](https://www.team-cymru.com/ip-asn-mapping).
 
+**Note:** This library uses Team Cymru's netcat interface, which is designed for bulk querying of multiple IP addresses. It is not intended for querying individual IP addresses. For single IP lookups use their DNS interface instead.
+
 ## Installation
 
 ```bash
