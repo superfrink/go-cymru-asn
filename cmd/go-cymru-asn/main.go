@@ -76,5 +76,9 @@ func readFromStdin() []string {
 		}
 	}
 
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "error reading stdin: %v\n", err)
+	}
+
 	return ips
 }
