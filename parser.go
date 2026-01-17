@@ -11,7 +11,10 @@ import (
 var (
 	ErrEmptyResponse = errors.New("empty response from server")
 	ErrInvalidFormat = errors.New("invalid response format")
+	ErrLineTooLong   = errors.New("response line exceeded maximum length")
 )
+
+const maxLineSize = 1024 * 1024 // 1MB max line size
 
 // parseResponse parses the bulk whois response into Result structs.
 // Response format (pipe-delimited):
@@ -27,6 +30,7 @@ func parseResponse(data []byte) ([]Result, []ParseError, error) {
 	var results []Result
 	var parseErrors []ParseError
 	scanner := bufio.NewScanner(bytes.NewReader(data))
+	scanner.Buffer(make([]byte, 0, 64*1024), maxLineSize)
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -53,6 +57,9 @@ func parseResponse(data []byte) ([]Result, []ParseError, error) {
 	}
 
 	if err := scanner.Err(); err != nil {
+		if errors.Is(err, bufio.ErrTooLong) {
+			return results, parseErrors, ErrLineTooLong
+		}
 		return results, parseErrors, err
 	}
 

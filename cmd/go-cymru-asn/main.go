@@ -68,7 +68,10 @@ func readFromStdin() []string {
 		return ips
 	}
 
+	const maxLineSize = 1024 * 1024 // 1MB max line size
 	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Buffer(make([]byte, 0, 64*1024), maxLineSize)
+
 	for scanner.Scan() {
 		line := scanner.Text()
 		if line != "" {
@@ -77,7 +80,11 @@ func readFromStdin() []string {
 	}
 
 	if err := scanner.Err(); err != nil {
-		fmt.Fprintf(os.Stderr, "error reading stdin: %v\n", err)
+		if err == bufio.ErrTooLong {
+			fmt.Fprintf(os.Stderr, "error reading stdin: line exceeded maximum length of %d bytes\n", maxLineSize)
+		} else {
+			fmt.Fprintf(os.Stderr, "error reading stdin: %v\n", err)
+		}
 	}
 
 	return ips
