@@ -129,7 +129,7 @@ func (c *Client) query(ctx context.Context, request []byte) ([]Result, []ParseEr
 		return nil, nil, fmt.Errorf("failed to set deadline: %w", setErr)
 	}
 
-	_, err = conn.Write(request)
+	_, err = io.Copy(conn, bytes.NewReader(request))
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to send request: %w", err)
 	}
