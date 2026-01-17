@@ -12,6 +12,8 @@ import (
 )
 
 func main() {
+	sandbox()
+
 	timeout := flag.Duration("timeout", 30*time.Second, "connection timeout")
 	server := flag.String("server", cymruasn.DefaultServer, "whois server address")
 	flag.Parse()
