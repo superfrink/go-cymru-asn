@@ -66,7 +66,6 @@ When running on OpenBSD with pledge(2) restrictions, the CLI tool requires:
 
 - `stdio` — standard I/O operations
 - `inet` — network access (TCP connection to whois server)
-- `rpath` — read access to DNS config files (e.g., `/etc/resolv.conf`)
 - `dns` — DNS resolution (for resolving `whois.cymru.com`)
 
 ## Testing
