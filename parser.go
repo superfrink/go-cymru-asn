@@ -9,9 +9,8 @@ import (
 )
 
 var (
-	ErrEmptyResponse  = errors.New("empty response from server")
-	ErrInvalidFormat  = errors.New("invalid response format")
-	ErrNoResults      = errors.New("no results in response")
+	ErrEmptyResponse = errors.New("empty response from server")
+	ErrInvalidFormat = errors.New("invalid response format")
 )
 
 // parseResponse parses the bulk whois response into Result structs.
