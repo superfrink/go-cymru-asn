@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"strings"
+	"time"
 )
 
 // NewClient creates a new ASN lookup client with the given options.
@@ -102,6 +103,9 @@ func (c *Client) buildRequest(ips []string) []byte {
 	return buf.Bytes()
 }
 
+// MaxResponseSize is the maximum allowed response size (10MB).
+const MaxResponseSize = 10 * 1024 * 1024
+
 // query sends the request to the whois server and returns parsed results.
 func (c *Client) query(ctx context.Context, request []byte) ([]Result, error) {
 	addr := net.JoinHostPort(c.server, c.port)
@@ -114,17 +118,14 @@ func (c *Client) query(ctx context.Context, request []byte) ([]Result, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to %s: %w", addr, err)
 	}
-	defer func() {
-		closeErr := conn.Close()
-		if closeErr != nil && err == nil {
-			err = closeErr
-		}
-	}()
+	defer conn.Close()
 
-	if deadline, ok := ctx.Deadline(); ok {
-		if setErr := conn.SetDeadline(deadline); setErr != nil {
-			return nil, fmt.Errorf("failed to set deadline: %w", setErr)
-		}
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		deadline = time.Now().Add(c.timeout)
+	}
+	if setErr := conn.SetDeadline(deadline); setErr != nil {
+		return nil, fmt.Errorf("failed to set deadline: %w", setErr)
 	}
 
 	_, err = conn.Write(request)
@@ -132,9 +133,13 @@ func (c *Client) query(ctx context.Context, request []byte) ([]Result, error) {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 
-	response, err := io.ReadAll(conn)
+	limitedReader := io.LimitReader(conn, MaxResponseSize+1)
+	response, err := io.ReadAll(limitedReader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+	if len(response) > MaxResponseSize {
+		return nil, fmt.Errorf("response exceeded maximum size of %d bytes", MaxResponseSize)
 	}
 
 	return parseResponse(response)
