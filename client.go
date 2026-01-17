@@ -150,12 +150,12 @@ func (c *Client) query(ctx context.Context, request []byte) ([]Result, []ParseEr
 func (c *Client) matchResultsToIPs(requestedIPs []string, results []Result) []LookupError {
 	resultMap := make(map[string]bool)
 	for _, r := range results {
-		resultMap[r.IP] = true
+		resultMap[canonicalIP(r.IP)] = true
 	}
 
 	var errs []LookupError
 	for _, ip := range requestedIPs {
-		if !resultMap[ip] {
+		if !resultMap[canonicalIP(ip)] {
 			errs = append(errs, LookupError{
 				IP:  ip,
 				Err: fmt.Errorf("no result returned for IP: %s", ip),
@@ -164,4 +164,13 @@ func (c *Client) matchResultsToIPs(requestedIPs []string, results []Result) []Lo
 	}
 
 	return errs
+}
+
+// canonicalIP returns a normalized string representation of an IP address.
+func canonicalIP(ip string) string {
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return ip
+	}
+	return parsed.String()
 }
