@@ -39,7 +39,7 @@ func main() {
     }
 
     for _, e := range resp.Errors {
-        fmt.Printf("Error for %s: %v\n", e.IP, e.Error)
+        fmt.Printf("Error for %s: %v\n", e.IP, e.Err)
     }
 }
 ```
