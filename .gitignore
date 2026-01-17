@@ -1,5 +1,5 @@
-# Binaries
-go-cymru-asn
+# Binaries (in root only, not cmd/ subdirs)
+/go-cymru-asn
 *.exe
 *.exe~
 *.dll
